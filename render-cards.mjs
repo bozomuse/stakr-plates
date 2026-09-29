@@ -1,8 +1,9 @@
 /* pre-render plate cards for watched addresses.
    usage: node render-cards.mjs
-   reads watchlist.json, renders each plate via api/plate.js handler,
-   writes PNGs + registry.json into the site repo's cards/ dir. */
-import handler from './api/plate.js';
+   reads watchlist.json, renders each plate, writes PNGs + registry.json
+   (with headline numbers, so the bankr skill can quote them without
+   recomputing) into the site repo's cards/ dir. */
+import { renderPlate } from './api/plate.js';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -17,20 +18,23 @@ async function main() {
   const registry = {};
   for (const address of watchlist) {
     try {
-      const req = new Request('http://localhost/api/plate?address=' + address);
-      const res = await handler(req);
-      if (!res.ok) {
-        console.log('skip', address, 'status', res.status);
-        continue;
-      }
-      const buf = Buffer.from(await res.arrayBuffer());
+      const { png, data } = await renderPlate(address);
       const file = address.toLowerCase() + '.png';
-      await writeFile(join(SITE_CARDS, file), buf);
-      registry[address.toLowerCase()] = {
+      await writeFile(join(SITE_CARDS, file), png);
+      const entry = {
         png: PUBLIC_BASE + '/' + file,
         renderedAt: new Date().toISOString(),
       };
-      console.log('ok', address, buf.length, 'bytes');
+      if (data) {
+        entry.stakr = data.myStakr;
+        entry.cooler = data.cooler;
+        entry.cut = data.cut;
+        entry.claimable = data.claimable;
+        entry.grillMaster = data.masterName;
+        entry.grillMasterBurned = data.masterBurned;
+      }
+      registry[address.toLowerCase()] = entry;
+      console.log('ok', address, png.length, 'bytes');
     } catch (e) {
       console.log('fail', address, e.message);
     }

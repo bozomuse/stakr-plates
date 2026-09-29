@@ -61,20 +61,18 @@ function errorCard(msg, fonts) {
   );
 }
 
-export default async function handler(req) {
-  const url = new URL(req.url);
-  const address = url.searchParams.get('address') || '';
+export async function renderPlate(address) {
   const fonts = await loadFonts().catch(() => []);
-
   if (!isAddr(address)) {
-    return errorCard('that plate doesn\u2019t exist — the grill needs a 0x address.', fonts);
+    const res = errorCard('that plate doesn\u2019t exist — the grill needs a 0x address.', fonts);
+    return { png: Buffer.from(await res.arrayBuffer()), data: null };
   }
-
   let d;
   try {
     d = await plateData(address);
   } catch (e) {
-    return errorCard('the chain didn\u2019t pick up — try again in a bit.', fonts);
+    const res = errorCard('the chain didn\u2019t pick up — try again in a bit.', fonts);
+    return { png: Buffer.from(await res.arrayBuffer()), data: null };
   }
 
   let hero, sub;
@@ -138,10 +136,23 @@ export default async function handler(req) {
     ]
   );
 
-  return new ImageResponse(el, {
+  const res = new ImageResponse(el, {
     width: 1200,
     height: 675,
     fonts,
     headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },
+  });
+  return { png: Buffer.from(await res.arrayBuffer()), data: d };
+}
+
+export default async function handler(req) {
+  const url = new URL(req.url);
+  const address = url.searchParams.get('address') || '';
+  const { png } = await renderPlate(address);
+  return new Response(png, {
+    headers: {
+      'content-type': 'image/png',
+      'Cache-Control': 'public, max-age=60, stale-while-revalidate=300',
+    },
   });
 }
